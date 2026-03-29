@@ -1,7 +1,5 @@
 package com.example.mlkitlabeler.ui.theme.screens
 
-import android.media.Image
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid

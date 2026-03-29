@@ -39,3 +39,12 @@ val labelSmall = TextStyle(
     lineHeight = 16.sp,
     letterSpacing = 0.5.sp
 )
+
+val titleLarge = TextStyle(
+    fontFamily = FontFamily.SansSerif,
+    fontWeight = FontWeight.Bold,
+    fontSize = 32.sp,
+    lineHeight = 40.sp,
+    letterSpacing = 0.5.sp,
+
+)
