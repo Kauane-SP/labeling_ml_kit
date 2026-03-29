@@ -2,6 +2,7 @@ package com.example.mlkitlabeler.ui.theme.viewModel
 
 import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
 import androidx.annotation.OptIn
@@ -18,18 +19,16 @@ import androidx.camera.lifecycle.awaitInstance
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
-import coil3.Uri
-import coil3.toCoilUri
 import com.example.mlkitlabeler.DetectedLabel
+import com.example.mlkitlabeler.data.ImageDataBase
 import com.google.mlkit.common.model.LocalModel
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
-import com.google.mlkit.vision.label.custom.CustomImageLabelerOptions
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-class CameraViewModel() : ViewModel() {
+class CameraViewModel(val imageDataBase: ImageDataBase) : ViewModel() {
 
     private val _surfaceRequest = MutableStateFlow<SurfaceRequest?>(null)
     val surfaceRequest: StateFlow<SurfaceRequest?> = _surfaceRequest
@@ -37,27 +36,31 @@ class CameraViewModel() : ViewModel() {
     private val _selectorCamera = MutableStateFlow<Boolean>(false)
     var selectorCamera: StateFlow<Boolean> = _selectorCamera
 
-    private val _imageList = MutableStateFlow<List<Uri>>(emptyList())
-    var imageList: StateFlow<List<Uri>> = _imageList
+    private val _imageList = MutableStateFlow<List<Uri?>>(emptyList())
+    var imageList: StateFlow<List<Uri?>> = _imageList
 
     private val _labelsList = MutableStateFlow<List<DetectedLabel>>(emptyList())
     var labelsList: StateFlow<List<DetectedLabel>> = _labelsList
 
-    private val cameraPreviewUseCase = Preview.Builder().build().apply {
-        setSurfaceProvider { newSurfaceRequest ->
-            _surfaceRequest.value = newSurfaceRequest
+    private var labelsCache: List<String> = emptyList()
+
+    private val cameraPreviewUseCase by lazy {
+        Preview.Builder().build().apply {
+            setSurfaceProvider { newSurfaceRequest ->
+                _surfaceRequest.value = newSurfaceRequest
+            }
         }
     }
 
     val customModel = LocalModel.Builder().setAssetFilePath("model.tflite").build()
 
-    val customOptions = CustomImageLabelerOptions.Builder(customModel).setConfidenceThreshold(0.5f)
-        .setConfidenceThreshold(0.2f).build()
-    private val labeler =
-        ImageLabeling.getClient(customOptions)
+//    val customOptions = CustomImageLabelerOptions.Builder(customModel).setConfidenceThreshold(0.5f)
+//        .setConfidenceThreshold(0.2f).build()
+//    private val labeler by lazy { ImageLabeling.getClient(customOptions) }
 
-//    private val labeler =
-//        ImageLabeling.getClient(ImageLabelerOptions.Builder().setConfidenceThreshold(0.7f).build())
+
+    private val labeler =
+        ImageLabeling.getClient(ImageLabelerOptions.Builder().setConfidenceThreshold(FORMAT_CONFIDENCE).build())
 
     private val imageAnalyzer = ImageAnalysis.Builder()
         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -82,7 +85,7 @@ class CameraViewModel() : ViewModel() {
         val processCameraProvider = ProcessCameraProvider.awaitInstance(appContext)
 
         imageAnalyzer.setAnalyzer(ContextCompat.getMainExecutor(appContext)) { imageProxy ->
-            processRealTime(imageProxy, appContext)
+            processRealTime(imageProxy)
         }
 
         processCameraProvider.unbindAll()
@@ -95,34 +98,32 @@ class CameraViewModel() : ViewModel() {
         )
     }
 
-    @OptIn(ExperimentalGetImage::class)
-    private fun processRealTime(imageProxy: ImageProxy, context: Context) {
-        if (imageProxy.image != null) {
-            val image = InputImage.fromMediaImage(
-                imageProxy.image, imageProxy.imageInfo.rotationDegrees
-            )
 
-            val newLabels: List<String> = context.resources.assets
-                .open("labels.txt")
-                .bufferedReader()
-                .readLines()
+    @OptIn(ExperimentalGetImage::class)
+    private fun processRealTime(imageProxy: ImageProxy) {
+        val mediaImage = imageProxy.image
+        if (mediaImage != null) {
+            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
 
             labeler.process(image)
                 .addOnSuccessListener { labels ->
-
                     val detectedLabels = labels.map { label ->
+                        val labelText = if (label.index < labelsCache.size) {
+                            labelsCache[label.index]
+                        } else {
+                            label.text
+                        }
+
                         DetectedLabel(
-                            text = "${newLabels[label.index]}",
+                            text = labelText,
                             confidence = label.confidence,
                             displayConfidence = "${(label.confidence * 100).toInt()}%"
                         )
                     }
                     _labelsList.value = detectedLabels
-                    Log.e("LABELS", labels.toString())
                 }
                 .addOnFailureListener {
-                    imageProxy.close()
-                    Log.e("LABELS", "Deu ruim")
+                    Log.e("LABELS", "Erro no processamento", it)
                 }
                 .addOnCompleteListener {
                     imageProxy.close()
@@ -157,31 +158,18 @@ class CameraViewModel() : ViewModel() {
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                     val uri = outputFileResults.savedUri
-                    _imageList.value += uri.toCoilUri()
 
-                    analyzeSaveImage(context, uri)
+                    _imageList.value += uri
                 }
 
                 override fun onError(exception: ImageCaptureException) {
-                    // Erro: output.savedUri
+                    Log.d("CameraView Error ", exception.message.toString())
                 }
 
             })
     }
 
-    private fun analyzeSaveImage(context: Context, uri: android.net.Uri) {
-        val image = InputImage.fromFilePath(context, uri)
-
-        labeler.process(image)
-            .addOnSuccessListener { labels ->
-                val teste = labels
-            }
-            .addOnFailureListener { e ->
-                Log.e("DEU RUIM", e.message.toString())
-            }
-    }
-
     companion object {
-        const val FORMAT_CONFIDENCE = "%.1f%%"
+        const val FORMAT_CONFIDENCE = 0.7f
     }
 }
