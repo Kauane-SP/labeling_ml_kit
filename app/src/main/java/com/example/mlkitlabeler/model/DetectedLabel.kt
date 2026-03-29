@@ -1,4 +1,4 @@
-package com.example.mlkitlabeler
+package com.example.mlkitlabeler.model
 
 data class DetectedLabel(
     val text: String,

@@ -19,7 +19,7 @@ import androidx.camera.lifecycle.awaitInstance
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
-import com.example.mlkitlabeler.DetectedLabel
+import com.example.mlkitlabeler.model.DetectedLabel
 import com.example.mlkitlabeler.data.ImageDataBase
 import com.google.mlkit.common.model.LocalModel
 import com.google.mlkit.vision.common.InputImage
